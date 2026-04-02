@@ -292,9 +292,9 @@ $stopwatch.Stop()
 $elapsedTime = $stopwatch.Elapsed
 Write-Log "[LANG-DEFAULT] - Summary - ExitCode: $LASTEXITCODE, Duration: $elapsedTime"
 
-# =========================
+###############################
 # FSLogix configuration
-# =========================
+###############################
 
 try {
     Write-Log "[FSLOGIX] - Action - Add 'localadmin' to 'FSLogix Profile Exclude List'"
@@ -318,9 +318,9 @@ catch {
     Write-Log "[FSLOGIX] - Error - FSLogix configuration failed: $($_.Exception.Message)" "ERROR"
 }
 
-# =========================
+###############################
 # Cloud Kerberos / AAD keys
-# =========================
+###############################
 
 try {
     Write-Log "[KERBEROS] - Action - Configure CloudKerberosTicketRetrievalEnabled"
@@ -344,9 +344,9 @@ catch {
     Write-Log "[AAD] - Error - AzureAD Account configuration failed: $($_.Exception.Message)" "ERROR"
 }
 
-# =========================
+###############################
 # TimeZone redirection
-# =========================
+###############################
 
 try {
     Write-Log "[TZ] - Action - Enable TimeZone Redirection"
@@ -358,9 +358,9 @@ catch {
     Write-Log "[TZ] - Error - TimeZone Redirection setup failed: $($_.Exception.Message)" "ERROR"
 }
 
-# =========================
+###############################
 # Default user hive modifications
-# =========================
+###############################
 
 $defaultUserHive   = "HKU\DefaultUser"
 $defaultUserNtuser = "C:\Users\Default\NTUSER.DAT"
@@ -396,9 +396,58 @@ finally {
     }
 }
 
-# =========================
+#######################################
+#    RDP Shortpath            #
+#######################################
+
+
+# Reference: https://docs.microsoft.com/en-us/azure/virtual-desktop/shortpath
+
+$stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+Write-Log 'AVD AIB Customization: Configure RDP shortpath and Windows Defender Firewall'
+
+# rdp shortpath reg key
+$WinstationsKey = 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations'
+
+$regKeyName = "fUseUdpPortRedirector"
+$regKeyValue = "1"
+
+$portName = "UdpPortNumber"
+$portValue = "3390"
+
+
+IF(!(Test-Path $WinstationsKey)) {
+    New-Item -Path $WinstationsKey -Force | Out-Null
+}
+
+try {
+    New-ItemProperty -Path $WinstationsKey -Name $regKeyName -ErrorAction:SilentlyContinue -PropertyType:dword -Value $regKeyValue -Force | Out-Null
+    New-ItemProperty -Path $WinstationsKey -Name $portName -ErrorAction:SilentlyContinue -PropertyType:dword -Value $portValue -Force | Out-Null
+}
+catch {
+    Write-Log "*** AVD AIB CUSTOMIZER PHASE *** RDP Shortpath - Cannot add the registry key *** : [$($_.Exception.Message)]"
+    Write-Log "Message: [$($_.Exception.Message)"]
+}
+
+# set up windows defender firewall
+
+try {
+    New-NetFirewallRule -DisplayName 'Remote Desktop - Shortpath (UDP-In)'  -Action Allow -Description 'Inbound rule for the Remote Desktop service to allow RDP traffic. [UDP 3390]' -Group '@FirewallAPI.dll,-28752' -Name 'RemoteDesktop-UserMode-In-Shortpath-UDP'  -PolicyStore PersistentStore -Profile Domain, Private -Service TermService -Protocol udp -LocalPort 3390 -Program '%SystemRoot%\system32\svchost.exe' -Enabled:True
+}
+catch {
+    Write-Log "*** AVD AIB CUSTOMIZER PHASE *** Cannot create firewall rule *** : [$($_.Exception.Message)]"
+}
+ 
+
+$stopwatch.Stop()
+$elapsedTime = $stopwatch.Elapsed
+Write-Log "*** AVD AIB CUSTOMIZER PHASE : Configure RDP shortpath and Windows Defender Firewall  - Exit Code: $LASTEXITCODE ***"
+Write-Log "*** AVD AIB CUSTOMIZER PHASE: Configure RDP shortpath and Windows Defender Firewall - Time taken: $elapsedTime ***"
+ 
+
+###############################
 # RSAT tools (AD DS + DNS)
-# =========================
+###############################
 
 try {
     Write-Log "[RSAT] - Action - Install RSAT tools for AD DS and DNS"
@@ -425,9 +474,9 @@ catch {
     Write-Log "[RSAT] - Error - RSAT installation block failed: $($_.Exception.Message)" "ERROR"
 }
 
-# =========================
+###############################
 # SSMS
-# =========================
+###############################
 
 try {
     Write-Log "[SSMS] - Action - Download latest SSMS"
@@ -445,9 +494,9 @@ catch {
     Write-Log "[SSMS] - Error - SSMS installation failed: $($_.Exception.Message)" "ERROR"
 }
 
-# =========================
+###############################
 # Visual Studio Code
-# =========================
+###############################
 
 try {
     Write-Log "[VSC] - Action - Download latest Visual Studio Code"
