@@ -6,7 +6,7 @@
             "value": "westeurope"
         },
         "NamePrefix": {
-            "value": "sh-custom"
+            "value": "avd-paw"
         },
         "NumberOfVms": {
             "value": 1
