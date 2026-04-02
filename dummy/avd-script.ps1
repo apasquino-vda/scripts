@@ -1,1 +1,1 @@
-Write-Log "No customizations"
+Write-Host "No customizations"
