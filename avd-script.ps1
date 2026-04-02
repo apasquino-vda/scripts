@@ -20,26 +20,50 @@ function Write-Log {
 Write-Log "--- AVD PATCH SCRIPT START ---"
 Write-Log "User: $(whoami)"
 
-#######################################
-#    Install language pack (Italian)  #
-#######################################
+# AVD Language Configuration Script
+# - Installs Italian language pack
+# - Sets Italian as default language/region
 
-[CmdletBinding()]
-Param (
-    [Parameter(Mandatory)]
-    [ValidateSet("Italian (Italy)")]
-    [System.String[]]$LanguageList
-)
+$ErrorActionPreference = 'Stop'
 
+# Working + log directory
+$WorkDir = "C:\HostPatch"
+New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null
+$logFile = Join-Path $WorkDir "avd-language-$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
+
+function Write-Log {
+    param(
+        [string]$Message,
+        [string]$Level = "INFO"
+    )
+    $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+    $entry = "[$timestamp] [$Level] $Message"
+    $entry | Tee-Object -FilePath $logFile -Append
+}
+
+Write-Log "--- LANGUAGE CONFIG SCRIPT START ---"
+Write-Log "User: $(whoami)"
+
+###########################################################
+# Function: Install-LanguagePack
+###########################################################
 function Install-LanguagePack {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateSet("Italian (Italy)")]
+        [string[]]$LanguageList
+    )
+
     BEGIN {
         $templateFilePathFolder = "C:\HostPatch"
         $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-        Write-Log "[LANGPACK] - Start - Install language pack (Italian)"
+        Write-Log "[LANGPACK] - Start - Install language pack(s): $($LanguageList -join ', ')"
 
-        # populate dictionary (only Italian)
-        $LanguagesDictionary = @{}
-        $LanguagesDictionary.Add("Italian (Italy)", "it-IT")
+        # Only Italian currently
+        $LanguagesDictionary = @{
+            "Italian (Italy)" = "it-IT"
+        }
 
         try {
             Write-Log "[LANGPACK] - Action - Disable LanguageComponentsInstaller tasks"
@@ -58,12 +82,17 @@ function Install-LanguagePack {
                 try {
                     Write-Log "[LANGPACK] - Action - Install language [$Language], attempt $i"
                     $LanguageCode = $LanguagesDictionary.$Language
+                    if (-not $LanguageCode) {
+                        Write-Log "[LANGPACK] - Error - Language mapping not found for [$Language]" "ERROR"
+                        break
+                    }
+
                     Install-Language -Language $LanguageCode -ErrorAction Stop
                     Write-Log "[LANGPACK] - Result - Language installed: $LanguageCode"
                     break
                 }
                 catch {
-                    Write-Log "[LANGPACK] - Error - Install attempt $i failed: $($_.Exception.Message)" "ERROR"
+                    Write-Log "[LANGPACK] - Error - Install attempt $i failed for [$Language]: $($_.Exception.Message)" "ERROR"
                     if ($i -eq 5) {
                         Write-Log "[LANGPACK] - Result - All install attempts failed for $Language" "ERROR"
                     }
@@ -100,197 +129,227 @@ function Install-LanguagePack {
     }
 }
 
-Install-LanguagePack -LanguageList "Italian (Italy)"
+###########################################################
+# Function: Set-DefaultLanguage
+###########################################################
+function Set-DefaultLanguage {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateSet("Italian (Italy)")]
+        [string]$Language
+    )
 
-#######################################
-#    Set default Language (Italian)   #
-#######################################
+    function Get-RegionInfo($Name='*') {
+        try {
+            Write-Log "[LANG-DEFAULT] - Action - Get region info for $Name"
+            $cultures = [System.Globalization.CultureInfo]::GetCultures('InstalledWin32Cultures')
 
-[CmdletBinding()]
-Param (
-    [Parameter(Mandatory)]
-    [ValidateSet("Italian (Italy)")]
-    [string]$Language
-)
+            $languageTag = $null
+            foreach($culture in $cultures) {
+                if($culture.DisplayName -eq $Name) {
+                    $languageTag = $culture.Name
+                    break
+                }
+            }
 
-function Get-RegionInfo($Name='*') {
+            if ($null -eq $languageTag) {
+                Write-Log "[LANG-DEFAULT] - Result - No culture found for $Name"
+                return
+            } else {
+                $region = [System.Globalization.RegionInfo]$culture.Name
+                Write-Log "[LANG-DEFAULT] - Result - Found culture: $languageTag, GeoID: $($region.GeoId)"
+                return @($languageTag, $region.GeoId)
+            }
+        }
+        catch {
+            Write-Log "[LANG-DEFAULT] - Error - Get-RegionInfo failed: $($_.Exception.Message)" "ERROR"
+            return
+        }
+    }
+
+    function UpdateUserLanguageList($languageTag) {
+        try {
+            Write-Log "[LANG-DEFAULT] - Action - Update user language list with $languageTag"
+            $userLanguageList = New-WinUserLanguageList -Language $languageTag
+            $installedUserLanguagesList = Get-WinUserLanguageList
+
+            foreach($language in $installedUserLanguagesList) {
+                $userLanguageList.Add($language.LanguageTag)
+            }
+
+            Set-WinUserLanguageList -LanguageList $userLanguageList -Force
+            Write-Log "[LANG-DEFAULT] - Result - User language list updated"
+        }
+        catch {
+            Write-Log "[LANG-DEFAULT] - Error - UpdateUserLanguageList failed: $($_.Exception.Message)" "ERROR"
+        }
+    }
+
+    function UpdateRegionSettings($GeoID) {
+        try {
+            Write-Log "[LANG-DEFAULT] - Action - Update region settings with GeoID $GeoID"
+
+            try {
+                Write-Log "[LANG-DEFAULT] - Action - Remove DeviceRegion registry key"
+                Remove-ItemProperty -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Control Panel\DeviceRegion" `
+                                    -Name "DeviceRegion" -Force -ErrorAction Continue
+                Write-Log "[LANG-DEFAULT] - Result - DeviceRegion registry key removed (if existed)"
+            }
+            catch {
+                Write-Log "[LANG-DEFAULT] - Warning - Remove DeviceRegion key failed: $($_.Exception.Message)" "WARN"
+            }
+
+            New-ItemProperty -Path "HKU\.DEFAULT\Control Panel\International\Geo" `
+                             -Name "Nation" -Value $GeoID -PropertyType String -Force
+            Set-WinHomeLocation -GeoId $GeoID
+            Write-Log "[LANG-DEFAULT] - Result - Region settings updated"
+        }
+        catch {
+            Write-Log "[LANG-DEFAULT] - Error - UpdateRegionSettings failed: $($_.Exception.Message)" "ERROR"
+        }
+    }
+
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    Write-Log "[LANG-DEFAULT] - Start - Set default Language ($Language)"
+
+    $templateFilePathFolder = "C:\AVDImage"
+    $LanguagesDictionary = @{
+        "Italian (Italy)" = "it-IT"
+    }
+
     try {
-        Write-Log "[LANG-DEFAULT] - Action - Get region info for $Name"
-        $cultures = [System.Globalization.CultureInfo]::GetCultures('InstalledWin32Cultures')
+        Write-Log "[LANG-DEFAULT] - Action - Disable LanguageComponentsInstaller tasks"
+        Disable-ScheduledTask -TaskName "\Microsoft\Windows\LanguageComponentsInstaller\Installation"
+        Disable-ScheduledTask -TaskName "\Microsoft\Windows\LanguageComponentsInstaller\ReconcileLanguageResources"
+        Write-Log "[LANG-DEFAULT] - Result - LanguageComponentsInstaller tasks disabled"
+    }
+    catch {
+        Write-Log "[LANG-DEFAULT] - Error - Failed to disable LanguageComponentsInstaller tasks: $($_.Exception.Message)" "ERROR"
+    }
 
-        $languageTag = $null
-        foreach($culture in $cultures) {        
-            if($culture.DisplayName -eq $Name) {
-                $languageTag = $culture.Name
+    # Resolve LanguageTag & GeoID
+    $languageDetails = Get-RegionInfo -Name $Language
+
+    if($null -eq $languageDetails) {
+        $LanguageTag = $LanguagesDictionary.$Language
+        Write-Log "[LANG-DEFAULT] - Info - Fallback LanguageTag from dictionary: $LanguageTag"
+    } else {
+        $languageTag = $languageDetails[0]
+        $GeoID      = $languageDetails[1]
+        $LanguageTag = $languageTag
+    }
+
+    # Ensure language pack installed
+    $foundLanguage = $false
+
+    try {
+        Write-Log "[LANG-DEFAULT] - Action - Check installed language packs"
+        $installedLanguages = Get-InstalledLanguage
+        foreach($languagePack in $installedLanguages) {
+            $languageID = $languagePack.LanguageId
+            if($languageID -eq $LanguageTag) {
+                $foundLanguage = $true
                 break
             }
-        }
-
-        if ($null -eq $languageTag) {
-            Write-Log "[LANG-DEFAULT] - Result - No culture found for $Name"
-            return
-        } else {
-            $region = [System.Globalization.RegionInfo]$culture.Name
-            Write-Log "[LANG-DEFAULT] - Result - Found culture: $languageTag, GeoID: $($region.GeoId)"
-            return @($languageTag, $region.GeoId)
+        } 
+        if ($foundLanguage) {
+            Write-Log "[LANG-DEFAULT] - Result - Language pack already installed: $LanguageTag"
         }
     }
     catch {
-        Write-Log "[LANG-DEFAULT] - Error - Get-RegionInfo failed: $($_.Exception.Message)" "ERROR"
-        return
+        Write-Log "[LANG-DEFAULT] - Error - Get-InstalledLanguage failed: $($_.Exception.Message)" "ERROR"
     }
-}
 
-function UpdateUserLanguageList($languageTag) {
-    try {
-        Write-Log "[LANG-DEFAULT] - Action - Update user language list with $languageTag"
-        $userLanguageList = New-WinUserLanguageList -Language $languageTag
-        $installedUserLanguagesList = Get-WinUserLanguageList
-
-        foreach($language in $installedUserLanguagesList) {
-            $userLanguageList.Add($language.LanguageTag)
-        }
-
-        Set-WinUserLanguageList -LanguageList $userLanguageList -Force
-        Write-Log "[LANG-DEFAULT] - Result - User language list updated"
-    }
-    catch {
-        Write-Log "[LANG-DEFAULT] - Error - UpdateUserLanguageList failed: $($_.Exception.Message)" "ERROR"
-    }
-}
-
-function UpdateRegionSettings($GeoID) {
-    try {
-        Write-Log "[LANG-DEFAULT] - Action - Update region settings with GeoID $GeoID"
-
-        try {
-            Write-Log "[LANG-DEFAULT] - Action - Remove DeviceRegion registry key"
-            Remove-ItemProperty -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Control Panel\DeviceRegion" `
-                                -Name "DeviceRegion" -Force -ErrorAction Continue
-            Write-Log "[LANG-DEFAULT] - Result - DeviceRegion registry key removed (if existed)"
-        }
-        catch {
-            Write-Log "[LANG-DEFAULT] - Warning - Remove DeviceRegion key failed: $($_.Exception.Message)" "WARN"
-        }
-
-        New-ItemProperty -Path "HKU\.DEFAULT\Control Panel\International\Geo" `
-                         -Name "Nation" -Value $GeoID -PropertyType String -Force
-        Set-WinHomeLocation -GeoId $GeoID
-        Write-Log "[LANG-DEFAULT] - Result - Region settings updated"
-    }
-    catch {
-        Write-Log "[LANG-DEFAULT] - Error - UpdateRegionSettings failed: $($_.Exception.Message)" "ERROR"
-    }
-}
-
-$stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-Write-Log "[LANG-DEFAULT] - Start - Set default Language (Italian)"
-
-$templateFilePathFolder = "C:\AVDImage"
-$LanguagesDictionary = @{}
-$LanguagesDictionary.Add("Italian (Italy)", "it-IT")
-
-try {
-    Write-Log "[LANG-DEFAULT] - Action - Disable LanguageComponentsInstaller tasks"
-    Disable-ScheduledTask -TaskName "\Microsoft\Windows\LanguageComponentsInstaller\Installation"
-    Disable-ScheduledTask -TaskName "\Microsoft\Windows\LanguageComponentsInstaller\ReconcileLanguageResources"
-    Write-Log "[LANG-DEFAULT] - Result - LanguageComponentsInstaller tasks disabled"
-}
-catch {
-    Write-Log "[LANG-DEFAULT] - Error - Failed to disable LanguageComponentsInstaller tasks: $($_.Exception.Message)" "ERROR"
-}
-
-$languageDetails = Get-RegionInfo -Name $Language
-
-if($null -eq $languageDetails) {
-    $LanguageTag = $LanguagesDictionary.$Language 
-} else {
-    $languageTag = $languageDetails[0]
-    $GeoID = $languageDetails[1]
-    $LanguageTag = $languageTag
-}
-
-$foundLanguage = $false
-
-try {
-    Write-Log "[LANG-DEFAULT] - Action - Check installed language packs"
-    $installedLanguages = Get-InstalledLanguage
-    foreach($languagePack in $installedLanguages) {
-        $languageID = $languagePack.LanguageId
-        if($languageID -eq $LanguageTag) {
-            $foundLanguage = $true
-            break
-        }
-    } 
-    if ($foundLanguage) {
-        Write-Log "[LANG-DEFAULT] - Result - Language pack already installed: $LanguageTag"
-    }
-}
-catch {
-    Write-Log "[LANG-DEFAULT] - Error - Get-InstalledLanguage failed: $($_.Exception.Message)" "ERROR"
-}
-
-if(-Not $foundLanguage) {
-    for($i=1; $i -le 5; $i++) {
-        try {
-            Write-Log "[LANG-DEFAULT] - Action - Install language pack $LanguageTag, attempt $i"
-            Install-Language -Language $LanguageTag -ErrorAction Stop
-            Write-Log "[LANG-DEFAULT] - Result - Language pack installed: $LanguageTag"
-            break
-        }
-        catch {
-            Write-Log "[LANG-DEFAULT] - Error - Install attempt $i failed: $($_.Exception.Message)" "ERROR"
-            if ($i -eq 5) {
-                Write-Log "[LANG-DEFAULT] - Result - All attempts failed for language pack $LanguageTag" "ERROR"
+    if(-Not $foundLanguage) {
+        for($i=1; $i -le 5; $i++) {
+            try {
+                Write-Log "[LANG-DEFAULT] - Action - Install language pack $LanguageTag, attempt $i"
+                Install-Language -Language $LanguageTag -ErrorAction Stop
+                Write-Log "[LANG-DEFAULT] - Result - Language pack installed: $LanguageTag"
+                break
+            }
+            catch {
+                Write-Log "[LANG-DEFAULT] - Error - Install attempt $i failed: $($_.Exception.Message)" "ERROR"
+                if ($i -eq 5) {
+                    Write-Log "[LANG-DEFAULT] - Result - All attempts failed for language pack $LanguageTag" "ERROR"
+                }
             }
         }
     }
-}
 
-try {
-    Write-Log "[LANG-DEFAULT] - Action - Set system preferred UI language to $LanguageTag"
-    Set-SystemPreferredUILanguage -Language $LanguageTag
-    Set-WinSystemLocale -SystemLocale $LanguageTag
-    Set-Culture -CultureInfo $LanguageTag
-    UpdateUserLanguageList -languageTag $LanguageTag
-    Write-Log "[LANG-DEFAULT] - Result - Default language set to $Language ($LanguageTag)"
-}
-catch {
-    Write-Log "[LANG-DEFAULT] - Error - Setting default language failed: $($_.Exception.Message)" "ERROR"
-}
-
-try {
-    $GeoID = (New-Object System.Globalization.RegionInfo($LanguageTag.Split("-")[1])).GeoId
-    UpdateRegionSettings($GeoID)
-}
-catch {
-    Write-Log "[LANG-DEFAULT] - Error - GeoID calculation or region update failed: $($_.Exception.Message)" "ERROR"
-}
-
-try {
-    if (Test-Path -Path $templateFilePathFolder -ErrorAction SilentlyContinue) {
-        Write-Log "[LANG-DEFAULT] - Action - Remove temp folder $templateFilePathFolder"
-        Remove-Item -Path $templateFilePathFolder -Force -Recurse -ErrorAction Continue
-        Write-Log "[LANG-DEFAULT] - Result - Temp folder removed"
+    # Set system language
+    try {
+        Write-Log "[LANG-DEFAULT] - Action - Set system preferred UI language to $LanguageTag"
+        Set-SystemPreferredUILanguage -Language $LanguageTag
+        Set-WinSystemLocale -SystemLocale $LanguageTag
+        Set-Culture -CultureInfo $LanguageTag
+        UpdateUserLanguageList -languageTag $LanguageTag
+        Write-Log "[LANG-DEFAULT] - Result - Default language set to $Language ($LanguageTag)"
     }
+    catch {
+        Write-Log "[LANG-DEFAULT] - Error - Setting default language failed: $($_.Exception.Message)" "ERROR"
+    }
+
+    # Region
+    try {
+        if (-not $GeoID) {
+            $GeoID = (New-Object System.Globalization.RegionInfo($LanguageTag.Split("-")[1])).GeoId
+        }
+        UpdateRegionSettings($GeoID)
+    }
+    catch {
+        Write-Log "[LANG-DEFAULT] - Error - GeoID calculation or region update failed: $($_.Exception.Message)" "ERROR"
+    }
+
+    # Cleanup
+    try {
+        if (Test-Path -Path $templateFilePathFolder -ErrorAction SilentlyContinue) {
+            Write-Log "[LANG-DEFAULT] - Action - Remove temp folder $templateFilePathFolder"
+            Remove-Item -Path $templateFilePathFolder -Force -Recurse -ErrorAction Continue
+            Write-Log "[LANG-DEFAULT] - Result - Temp folder removed"
+        }
+    }
+    catch {
+        Write-Log "[LANG-DEFAULT] - Error - Removing temp folder failed: $($_.Exception.Message)" "ERROR"
+    }
+
+    # Re-enable tasks
+    try {
+        Write-Log "[LANG-DEFAULT] - Action - Enable LanguageComponentsInstaller tasks"
+        Enable-ScheduledTask -TaskName "\Microsoft\Windows\LanguageComponentsInstaller\Installation"
+        Enable-ScheduledTask -TaskName "\Microsoft\Windows\LanguageComponentsInstaller\ReconcileLanguageResources"
+        Write-Log "[LANG-DEFAULT] - Result - LanguageComponentsInstaller tasks enabled"
+    }
+    catch {
+        Write-Log "[LANG-DEFAULT] - Error - Failed to enable LanguageComponentsInstaller tasks: $($_.Exception.Message)" "ERROR"
+    }
+
+    $stopwatch.Stop()
+    $elapsedTime = $stopwatch.Elapsed
+    Write-Log "[LANG-DEFAULT] - Summary - ExitCode: $LASTEXITCODE, Duration: $elapsedTime"
+}
+
+###########################################################
+# Main script flow
+###########################################################
+
+try {
+    Install-LanguagePack -LanguageList "Italian (Italy)"
 }
 catch {
-    Write-Log "[LANG-DEFAULT] - Error - Removing temp folder failed: $($_.Exception.Message)" "ERROR"
+    Write-Log "[MAIN] - Error - Install-LanguagePack failed: $($_.Exception.Message)" "ERROR"
 }
 
 try {
-    Write-Log "[LANG-DEFAULT] - Action - Enable LanguageComponentsInstaller tasks"
-    Enable-ScheduledTask -TaskName "\Microsoft\Windows\LanguageComponentsInstaller\Installation"
-    Enable-ScheduledTask -TaskName "\Microsoft\Windows\LanguageComponentsInstaller\ReconcileLanguageResources"
-    Write-Log "[LANG-DEFAULT] - Result - LanguageComponentsInstaller tasks enabled"
+    Set-DefaultLanguage -Language "Italian (Italy)"
 }
 catch {
-    Write-Log "[LANG-DEFAULT] - Error - Failed to enable LanguageComponentsInstaller tasks: $($_.Exception.Message)" "ERROR"
+    Write-Log "[MAIN] - Error - Set-DefaultLanguage failed: $($_.Exception.Message)" "ERROR"
 }
 
-$stopwatch.Stop()
-$elapsedTime = $stopwatch.Elapsed
-Write-Log "[LANG-DEFAULT] - Summary - ExitCode: $LASTEXITCODE, Duration: $elapsedTime"
+Write-Log "--- LANGUAGE CONFIG SCRIPT END ---"
+exit 0
 
 ###############################
 # FSLogix configuration
