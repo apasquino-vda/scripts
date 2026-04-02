@@ -1,1 +1,1 @@
-Wriht-Host "No customizations"
+Write-Host "No customizations"
