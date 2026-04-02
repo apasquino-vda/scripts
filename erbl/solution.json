@@ -33,9 +33,9 @@
       "name": "[format('{0}-{1}/CustomScriptExtension', parameters('NamePrefix'), range(parameters('VirtualMachineIndex'), parameters('NumberOfVms'))[copyIndex()])]",
       "location": "[parameters('Location')]",
       "properties": {
-        "publisher": "Microsoft.Compute",
+        "publisher": "Microsoft.Azure.Local.CustomScriptExtension",
         "type": "CustomScriptExtension",
-        "typeHandlerVersion": "1.10",
+        "typeHandlerVersion": "1.0",
         "autoUpgradeMinorVersion": true,
         "settings": {
           "commandToExecute": "powershell -ExecutionPolicy Unrestricted -File avd-script.ps1",
