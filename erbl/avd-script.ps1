@@ -24,11 +24,12 @@ Write-Log "User: $(whoami)"
 
 ################################################################################################
 
-# TimeZone Redirection
+Write-Log "TimeZone Redirection"
 New-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" -Name "fEnableTimeZoneRedirection" -PropertyType DWord -Value 1 -Force | Out-Null
 
 ################################################################################################
 
+Write-Log "Desktop and First Run"
 # Desktop and First Run
 # Load the default user registry hive
 reg load "HKU\DefaultUser" "C:\Users\Default\NTUSER.DAT"
@@ -45,10 +46,13 @@ reg unload "HKU\DefaultUser"
 ###############################
 # Install specific RSAT Tools if not already installed
 ###############################
-
+Write-Log "RSAT ADDS"
 Add-WindowsCapability -Online -Name Rsat.ActiveDirectory.DS-LDS.Tools~~~~0.0.1.0
+Write-Log "RSAT GPO"
 Add-WindowsCapability -Online -Name Rsat.GroupPolicy.Management.Tools~~~~0.0.1.0
+Write-Log "RSAT DNS"
 Add-WindowsCapability -Online -Name Rsat.Dns.Tools~~~~0.0.1.0
+Write-Log "RSAT DHCP"
 Add-WindowsCapability -Online -Name Rsat.DHCP.Tools~~~~0.0.1.0
 
 # Install All RSAT Tools at Once:
