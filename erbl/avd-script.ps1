@@ -127,9 +127,8 @@ if (-not $vscodeInstalled) {
 
         Write-Log "[VSC] - Action - Silent install"
         Start-Process -FilePath $InstallerPath `
-            -ArgumentList "/VERYSILENT /NORESTART /MERGETASKS=""addcontextmenufiles,addcontextmenufolders,addtopath""" `
+            -ArgumentList "/verysilent", "/mergetasks='!runcode,addcontextmenufiles,addcontextmenufolders,associatewithfiles,addtopath'" `
             -Wait -NoNewWindow
-
         Write-Log "[VSC] - Result - Installation completed"
         Remove-Item $InstallerPath -Force -ErrorAction SilentlyContinue
     }
