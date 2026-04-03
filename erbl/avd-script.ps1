@@ -63,8 +63,7 @@ Add-WindowsCapability -Online -Name Rsat.DHCP.Tools~~~~0.0.1.0
 ###############################
 
 $ssmsPaths = @(
-    "C:\Program Files (x86)\Microsoft SQL Server Management Studio 19\Common7\IDE\Ssms.exe",
-    "C:\Program Files (x86)\Microsoft SQL Server\180\Tools\Binn\ManagementStudio\Ssms.exe"  # older
+    "C:\Program Files (x86)\Microsoft SQL Server Management Studio 20\Common7\IDE\Ssms.exe"
 )
 
 $ssmsInstalled = $false
