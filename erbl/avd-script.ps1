@@ -119,7 +119,7 @@ foreach ($p in $vscodePaths) {
 if (-not $vscodeInstalled) {
     try {
         Write-Log "[VSC] - Action - Download latest Visual Studio Code"
-        $DownloadUrl  = "https://update.code.visualstudio.com/latest/win32-x64-user/stable"
+        $DownloadUrl  = "https://code.visualstudio.com/sha/download?build=stable&os=win32-x64"
         $InstallerPath = Join-Path $WorkDir "VSCodeSetup-x64.exe"
 
         Invoke-WebRequest -Uri $DownloadUrl -OutFile $InstallerPath -UseBasicParsing
