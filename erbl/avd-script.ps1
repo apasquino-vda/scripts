@@ -103,7 +103,7 @@ else {
 ###############################
 
 $vscodePaths = @(
-    "C:\Program Files\Microsoft VS Code\Code.exe",
+    "C:\Program Files\Microsoft VS Code\Code.exe"
 )
 
 $vscodeInstalled = $false
