@@ -125,12 +125,17 @@ if (-not $vscodeInstalled) {
         Write-Log "[VSC] - Result - Downloaded to $InstallerPath"
 
         Write-Log "[VSC] - Action - Silent install"
-        $LogPath = "$WorkDir\VSCodeInstall.log"
         Start-Process -FilePath $InstallerPath `
-        -ArgumentList "/verysilent /norestart /log=""$LogPath"" /mergetasks=""!runcode,addcontextmenufiles,addcontextmenufolders,associatewithfiles,addtopath""" `
+        -ArgumentList "/verysilent /norestart /mergetasks=""!runcode,addcontextmenufiles,addcontextmenufolders,associatewithfiles,addtopath""" `
         -Wait `
         -NoNewWindow
-    
+
+        #$LogPath = "$WorkDir\VSCodeInstall.log"
+        #Start-Process -FilePath $InstallerPath `
+        #-ArgumentList "/verysilent /norestart /log=""$LogPath"" /mergetasks=""!runcode,addcontextmenufiles,addcontextmenufolders,associatewithfiles,addtopath""" `
+        #-Wait `
+        #-NoNewWindow
+        
         Write-Log "[VSC] - Result - Installation completed"
         Remove-Item $InstallerPath -Force -ErrorAction SilentlyContinue
     }
