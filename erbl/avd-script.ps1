@@ -121,15 +121,15 @@ if (-not $vscodeInstalled) {
         $DownloadUrl  = "https://code.visualstudio.com/sha/download?build=stable&os=win32-x64"
         $InstallerPath = Join-Path $WorkDir "VSCodeSetup-x64.exe"
 
-        #Invoke-WebRequest -Uri $DownloadUrl -OutFile $InstallerPath -UseBasicParsing
+        Invoke-WebRequest -Uri $DownloadUrl -OutFile $InstallerPath -UseBasicParsing
         Write-Log "[VSC] - Result - Downloaded to $InstallerPath"
 
         Write-Log "[VSC] - Action - Silent install"
         $LogPath = "$WorkDir\VSCodeInstall.log"
-    Start-Process -FilePath $InstallerPath `
-    -ArgumentList "/verysilent /norestart /log=""$LogPath"" /mergetasks=""!runcode,addcontextmenufiles,addcontextmenufolders,associatewithfiles,addtopath""" `
-    -Wait `
-    -NoNewWindow
+        Start-Process -FilePath $InstallerPath `
+        -ArgumentList "/verysilent /norestart /log=""$LogPath"" /mergetasks=""!runcode,addcontextmenufiles,addcontextmenufolders,associatewithfiles,addtopath""" `
+        -Wait `
+        -NoNewWindow
     
         Write-Log "[VSC] - Result - Installation completed"
         Remove-Item $InstallerPath -Force -ErrorAction SilentlyContinue
